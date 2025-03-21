@@ -1,5 +1,5 @@
 //! Process management syscalls
-use crate::task::{change_program_brk, exit_current_and_run_next, suspend_current_and_run_next};
+use crate::{mm::translated_byte_buffer, task::{change_program_brk, current_user_token, exit_current_and_run_next, suspend_current_and_run_next}, timer::get_time_us};
 
 #[repr(C)]
 #[derive(Debug)]
@@ -25,9 +25,58 @@ pub fn sys_yield() -> isize {
 /// YOUR JOB: get time with second and microsecond
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
-pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
+#[allow(unused)]
+pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
     trace!("kernel: sys_get_time");
-    -1
+    if ts.is_null(){
+        return  -1;
+    }
+
+    let ref time_value = TimeVal{
+        sec: get_time_us() / 1_000_000,
+        usec: get_time_us() % 1_000_000
+    };
+    let len = core::mem::size_of::<TimeVal>();
+    let dst_vec = translated_byte_buffer(
+        current_user_token(), 
+        ts as *const u8, 
+        len
+    );
+
+    // METHOD 1
+    // let src =time_value as *const TimeVal;
+    // for (i , dst) in dst_vec.into_iter().enumerate(){
+    //     let unit_len = dst.len();
+    //     unsafe {
+    //     dst.copy_from_slice(core::slice::from_raw_parts(
+    //         src.wrapping_byte_add(i * unit_len) as *const u8, 
+    //         unit_len
+    //     ));}
+    // }
+
+    // METHOD 2
+    let src = unsafe {
+        core::slice::from_raw_parts(
+            time_value as *const TimeVal as *const u8,
+            core::mem::size_of::<TimeVal>(),
+        )
+    };
+    let mut offset = 0;
+    for dst in  dst_vec{
+        let unit_len = dst.len();
+        if offset + unit_len > src.len(){
+            println!("sys_get_time : incomplete write");
+            return  -1;
+        }
+        // dst.copy_from_slice(&src[offset..offset+len]);
+        dst.copy_from_slice(&src[offset..offset + len]);
+        offset += unit_len;
+    }
+    if offset != src.len(){
+        println!("sys_get_time : incomplete write");
+        return  -1;
+    }
+    0
 }
 
 /// TODO: Finish sys_trace to pass testcases
