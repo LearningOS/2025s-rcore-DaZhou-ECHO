@@ -30,7 +30,7 @@ pub struct TaskControlBlock {
     pub program_brk: usize,
 
     /// syscall times
-    pub syscall_times: [u32;500],
+    pub syscall_times: [isize;500],
 }
 
 impl TaskControlBlock {

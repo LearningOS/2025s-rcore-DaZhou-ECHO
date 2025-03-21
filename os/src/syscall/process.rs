@@ -96,12 +96,6 @@ pub fn sys_trace(trace_request: usize, id: usize, data: usize) -> isize {
         }
         // *dst_vec[0]
     }else if trace_request == 1{
-        // for (i,dst) in dst_vec.into_iter().enumerate(){
-        //     let unit_len =dst.len();
-        //     unsafe {
-                
-        //     }
-        // }
         unsafe {
             core::ptr::write_bytes(dst_vec[0].as_mut_ptr(), data as u8, 1);
         }
@@ -111,7 +105,6 @@ pub fn sys_trace(trace_request: usize, id: usize, data: usize) -> isize {
     }else {
         -1
     }
-    
 }
 
 // YOUR JOB: Implement mmap.

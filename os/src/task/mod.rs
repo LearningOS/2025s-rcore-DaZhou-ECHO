@@ -164,8 +164,9 @@ impl TaskManager {
     fn get_systimes(&self , syscall_id:usize) -> isize{
         let inner = self.inner.exclusive_access();
         let current = inner.current_task;
-        inner.tasks[current].syscall_times[syscall_id] as isize
+        inner.tasks[current].syscall_times[syscall_id] //as isize
     }
+
 }
 
 /// Run the first task in task list.
