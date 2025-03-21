@@ -1,5 +1,6 @@
 //! Process management syscalls
-use crate::{mm::translated_byte_buffer, task::{change_program_brk, current_user_token, exit_current_and_run_next, suspend_current_and_run_next}, timer::get_time_us};
+
+use crate::{mm::translated_byte_buffer, task::{change_program_brk, current_user_token, exit_current_and_run_next, get_systimes, suspend_current_and_run_next}, timer::get_time_us};
 
 #[repr(C)]
 #[derive(Debug)]
@@ -81,9 +82,36 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
 
 /// TODO: Finish sys_trace to pass testcases
 /// HINT: You might reimplement it with virtual memory management.
-pub fn sys_trace(_trace_request: usize, _id: usize, _data: usize) -> isize {
+pub fn sys_trace(trace_request: usize, id: usize, data: usize) -> isize {
     trace!("kernel: sys_trace");
-    -1
+    let ptr = id as *const u8;
+    let token = current_user_token();
+    let mut dst_vec = translated_byte_buffer(token, ptr, 1);
+    if ptr.is_null(){
+        return -1;
+    }
+    if trace_request == 0{
+        unsafe {
+            core::ptr::read(dst_vec.as_ptr() as *const u8) as isize
+        }
+        // *dst_vec[0]
+    }else if trace_request == 1{
+        // for (i,dst) in dst_vec.into_iter().enumerate(){
+        //     let unit_len =dst.len();
+        //     unsafe {
+                
+        //     }
+        // }
+        unsafe {
+            core::ptr::write_bytes(dst_vec[0].as_mut_ptr(), data as u8, 1);
+        }
+        0
+    }else if trace_request == 2{
+        get_systimes(id)
+    }else {
+        -1
+    }
+    
 }
 
 // YOUR JOB: Implement mmap.

@@ -153,6 +153,19 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+    
+    ///
+    fn record_systimes(&self , syscall_id:usize){
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].syscall_times[syscall_id] +=1;
+    }
+    ///
+    fn get_systimes(&self , syscall_id:usize) -> isize{
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].syscall_times[syscall_id] as isize
+    }
 }
 
 /// Run the first task in task list.
@@ -201,4 +214,13 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+///
+pub fn record_systimes(syscall_id:usize){
+    TASK_MANAGER.record_systimes(syscall_id);
+}
+///
+pub fn get_systimes(syscall_id:usize) -> isize{
+    TASK_MANAGER.get_systimes(syscall_id)
 }
