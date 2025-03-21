@@ -39,7 +39,16 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
 }
 
 // TODO: implement the syscall
-pub fn sys_trace(_trace_request: usize, _id: usize, _data: usize) -> isize {
+#[allow(unused)]
+pub fn sys_trace(trace_request: usize, id: usize, data: usize) -> isize {
     trace!("kernel: sys_trace");
-    -1
+    if trace_request == 0{
+        0
+    }else if trace_request == 1{
+        0
+    }else if trace_request ==2 {
+        0
+    }else{
+        -1
+    }
 }
