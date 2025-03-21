@@ -54,6 +54,7 @@ lazy_static! {
         let mut tasks = [TaskControlBlock {
             task_cx: TaskContext::zero_init(),
             task_status: TaskStatus::UnInit,
+            syscalll_times:[0;500],
         }; MAX_APP_NUM];
         for (i, task) in tasks.iter_mut().enumerate() {
             task.task_cx = TaskContext::goto_restore(init_app_cx(i));
@@ -135,6 +136,19 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+    /// record sys times
+    fn record_systimes(&self,id:usize){
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].syscalll_times[id]+=1;
+
+    }
+    /// get systimes
+    fn get_systimes(&self,id:usize) -> isize{
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].syscalll_times[id]
+    }
 }
 
 /// Run the first task in task list.
@@ -168,4 +182,14 @@ pub fn suspend_current_and_run_next() {
 pub fn exit_current_and_run_next() {
     mark_current_exited();
     run_next_task();
+}
+
+/// interface to record the systimes
+pub fn record_systimes(id:usize){
+    TASK_MANAGER.record_systimes(id);
+}
+
+/// getsystimes
+pub fn get_systimes(id:usize) -> isize{
+    TASK_MANAGER.get_systimes(id)
 }
