@@ -1,5 +1,6 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
+use super::address::VPNRange;
 use super::{frame_alloc, FrameTracker, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use alloc::vec;
 use alloc::vec::Vec;
@@ -116,7 +117,7 @@ impl PageTable {
         result
     }
     /// Find PageTableEntry by VirtPageNum
-    fn find_pte(&self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
+    pub fn find_pte(&self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
         let idxs = vpn.indexes();
         let mut ppn = self.root_ppn;
         let mut result: Option<&mut PageTableEntry> = None;
@@ -136,7 +137,7 @@ impl PageTable {
     /// set the map between virtual page number and physical page number
     #[allow(unused)]
     pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
-        let pte = self.find_pte_create(vpn).unwrap();
+        let pte: &mut PageTableEntry = self.find_pte_create(vpn).unwrap();
         assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn);
         *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
     }
@@ -154,6 +155,32 @@ impl PageTable {
     /// get the token from the page table
     pub fn token(&self) -> usize {
         8usize << 60 | self.root_ppn.0
+    }
+    // ///
+    // pub fn map_force(&mut self,vpn: VirtPageNum,ppn: PhysPageNum,flags: PTEFlags){
+    //     let pte: &mut PageTableEntry = self.find_pte_create(vpn).unwrap();
+    //     *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
+    // }
+
+    ///
+    pub fn check_vpn_valid(&self , start_va:VirtAddr , end_va :VirtAddr) -> isize{
+        // let mut start_vpn = VirtPageNum::from(start_va.floor());
+        let mut start_vpn = start_va.floor();
+        start_vpn.step();
+        // start_vpn.step();
+        // let end_vpn = VirtPageNum::from(end_va.ceil());
+        let end_vpn =end_va.ceil();
+        let vpnrange = VPNRange::new(start_vpn, end_vpn);
+        for vpn in vpnrange{
+            // if !self.find_pte(vpn).is_none(){
+            //     return -1;
+            // }
+            match self.find_pte(vpn){
+                Some(pte)=> if pte.is_valid(){return -1;},
+                None => return -1,
+            }
+        }
+        0
     }
 }
 
@@ -179,3 +206,7 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
     }
     v
 }
+
+// pub fn translated_byte(token: usize, ptr: *const u8, len: usize) -> &mut u8{
+    
+// }

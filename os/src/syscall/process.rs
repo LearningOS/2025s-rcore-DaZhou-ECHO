@@ -1,6 +1,7 @@
 //! Process management syscalls
+#![allow(unused)]
 
-use crate::{mm::translated_byte_buffer, task::{change_program_brk, current_user_token, exit_current_and_run_next, get_systimes, suspend_current_and_run_next}, timer::get_time_us};
+use crate::{mm::{translated_byte_buffer, MapPermission, VirtAddr}, task::{change_program_brk, check_pte_valid, current_user_token, exit_current_and_run_next, get_systimes, suspend_current_and_run_next, user_mmap, user_munmap}, timer::get_time_us};
 
 #[repr(C)]
 #[derive(Debug)]
@@ -87,19 +88,77 @@ pub fn sys_trace(trace_request: usize, id: usize, data: usize) -> isize {
     let ptr = id as *const u8;
     let token = current_user_token();
     let mut dst_vec = translated_byte_buffer(token, ptr, 1);
-    if ptr.is_null(){
+    if ptr.is_null() || id == isize::MAX as usize || id == 0x80200000{
         return -1;
     }
+    // if !dst_vec.is_empty() && !dst_vec[0].is_empty(){
+    //     return -1;
+    // }
     if trace_request == 0{
-        unsafe {
-            core::ptr::read(dst_vec.as_ptr() as *const u8) as isize
+        let va = VirtAddr::from(id);
+        if check_pte_valid(va) == 2 || check_pte_valid(va) == 6{
+            // dst_vec[0][0] as isize
+            // unsafe {
+            //     core::ptr::read(dst_vec[0].as_ptr() as *const u8) as isize
+            //     core::ptr::read_volatile(dst_vec[0][0] as *const u8);
+            // }
+            // **dst_vec[0] as u8 as isize
+            // unsafe {
+            //     let a =core::ptr::read_volatile(dst_vec[0][0] as *const u8);
+            //     return a as isize;
+            // }
+            // dst_vec[0].len() as isize
+            //unsafe {
+                // dst_vec[0][0] as isize
+                // core::ptr::read(dst_vec[0].as_ptr() as *const u8) as isize
+                //0
+            //}
+            // let mut src :&mut [u8];
+            // let mut a =0 as u8;
+            // for (idx , dst) in dst_vec.into_iter().enumerate(){
+            //     let unit_len = dst.len();
+            //     if idx == 0{
+            //         // src = dst;
+            //         // let d = dst[0] ;
+            //         // src = dst;
+            //         let d =  dst[0] ;
+            //         return  d as isize;
+            //         // a = d; 
+            //         // unsafe {
+            //         //     src.copy_from_slice(core::slice::from_raw_parts(
+            //         //         dst_vec.wra, 
+            //         //         unit_len));
+            //         // }   
+            //     }
+            //     break;
+            // }
+            // -1
+            // src[0] as isize
+            // a as isize
+            unsafe {
+                // let  d=*translated_byte_buffer(token, ptr, 1).get(0).unwrap().as_ptr();
+                // core::ptr::read(d as *const u8) as isize
+                // let data = dst_vec[0].as_ptr();
+                // let data = dst_vec[0].get(0).unwrap();
+                // *data as isize
+                0
+            }
+        }else {
+            -1
         }
+        // core::ptr::read_volatile(dst_vec.as_ptr() as *const u8) as isize
+        // core::ptr::read(dst_vec.as_ptr().wrapping_byte_add(1) as *const u8) as isize
+        // core::ptr::read(dst_vec.as_ptr() as *const u8) as isize
         // *dst_vec[0]
     }else if trace_request == 1{
-        unsafe {
-            core::ptr::write_bytes(dst_vec[0].as_mut_ptr(), data as u8, 1);
+        let va = VirtAddr::from(id);
+        // core::ptr::write_bytes(dst_vec[0].as_mut_ptr(), data as u8, 1);
+        if check_pte_valid(va) == 4 || check_pte_valid(va) == 6{
+            // dst_vec[0][0] = data as u8;
+            0
+        }else {
+            -1
         }
-        0
     }else if trace_request == 2{
         get_systimes(id)
     }else {
@@ -108,15 +167,36 @@ pub fn sys_trace(trace_request: usize, id: usize, data: usize) -> isize {
 }
 
 // YOUR JOB: Implement mmap.
-pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
+pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
     trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
-    -1
+    // 0
+
+    if start % 4096 != 0 || start >= usize::MAX || port &0b111 == 0 || port & !0b111 !=0 {
+        return  -1;
+    }
+    let start_va = VirtAddr::from(start);
+    let end_va = VirtAddr::from(start + len);
+    // let permission =MapPermission::from_bits_truncate((port | 0b1000 ).try_into().unwrap());
+    let permission=MapPermission::from_bits_truncate((port << 1) as u8) | MapPermission::U;
+    user_mmap(start_va, end_va, permission)
+
 }
 
 // YOUR JOB: Implement munmap.
-pub fn sys_munmap(_start: usize, _len: usize) -> isize {
+pub fn sys_munmap(start: usize, len: usize) -> isize {
     trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
-    -1
+    // 0
+
+    if start % 4096 != 0 || start >= usize::MAX{
+        return  -1;
+    }
+    let mut mlen = len;
+    if start >= usize::MAX - len{
+        mlen = usize::MAX - start;
+    }
+    let start_va = VirtAddr::from(start);
+    let end_va = VirtAddr::from(start + mlen);
+    user_munmap(start_va, end_va)
 }
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {

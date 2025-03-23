@@ -8,13 +8,14 @@
 //!
 //! Be careful when you see `__switch` ASM function in `switch.S`. Control flow around this function
 //! might not be what you expect.
-
+#![allow(unused)]
 mod context;
 mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
 use crate::loader::{get_app_data, get_num_app};
+use crate::mm::{MapPermission, VirtAddr};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
@@ -167,6 +168,29 @@ impl TaskManager {
         inner.tasks[current].syscall_times[syscall_id] //as isize
     }
 
+    ///
+    fn user_mmap(&self ,start_va:VirtAddr ,end_va:VirtAddr ,permission:MapPermission) -> isize{
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        if inner.tasks[current].memory_set.check_vpn_valid(start_va, end_va) == -1{
+            return  -1;
+        }
+        inner.tasks[current].memory_set.insert_framed_area(start_va, end_va, permission);
+        0
+    }
+    ///
+    fn check_pte_valid(&self , va : VirtAddr)->isize{
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].memory_set.check_pte_valid(va)
+    }
+    ///
+    fn user_munmap(&self , start_va:VirtAddr ,end_va:VirtAddr) -> isize{
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].memory_set.user_munmap(start_va, end_va)
+    }
+
 }
 
 /// Run the first task in task list.
@@ -224,4 +248,16 @@ pub fn record_systimes(syscall_id:usize){
 ///
 pub fn get_systimes(syscall_id:usize) -> isize{
     TASK_MANAGER.get_systimes(syscall_id)
+}
+///
+pub fn user_mmap(start_va:VirtAddr,end_va:VirtAddr,permmision:MapPermission) -> isize{
+    TASK_MANAGER.user_mmap(start_va, end_va, permmision)
+}
+///
+pub fn check_pte_valid(va : VirtAddr)-> isize{
+    TASK_MANAGER.check_pte_valid(va)
+}
+///
+pub fn user_munmap(start_va:VirtAddr , end_va:VirtAddr)-> isize{
+    TASK_MANAGER.user_munmap(start_va, end_va)
 }
