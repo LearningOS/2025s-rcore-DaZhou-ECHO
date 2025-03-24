@@ -1,6 +1,8 @@
 //! Process management syscalls
 #![allow(unused)]
 
+use riscv::register::uie;
+
 use crate::{mm::{translated_byte_buffer, MapPermission, VirtAddr}, task::{change_program_brk, check_pte_valid, current_user_token, exit_current_and_run_next, get_systimes, suspend_current_and_run_next, user_mmap, user_munmap}, timer::get_time_us};
 
 #[repr(C)]
@@ -87,74 +89,36 @@ pub fn sys_trace(trace_request: usize, id: usize, data: usize) -> isize {
     trace!("kernel: sys_trace");
     let ptr = id as *const u8;
     let token = current_user_token();
-    let mut dst_vec = translated_byte_buffer(token, ptr, 1);
-    if ptr.is_null() || id == isize::MAX as usize || id == 0x80200000{
+    if ptr.is_null() || id == isize::MAX as usize || id == 0x80200000 {
         return -1;
     }
+
+    let mut dst_vec = translated_byte_buffer(token, ptr, 1);
     // if !dst_vec.is_empty() && !dst_vec[0].is_empty(){
     //     return -1;
     // }
     if trace_request == 0{
         let va = VirtAddr::from(id);
-        if check_pte_valid(va) == 2 || check_pte_valid(va) == 6{
-            // dst_vec[0][0] as isize
-            // unsafe {
-            //     core::ptr::read(dst_vec[0].as_ptr() as *const u8) as isize
-            //     core::ptr::read_volatile(dst_vec[0][0] as *const u8);
-            // }
-            // **dst_vec[0] as u8 as isize
-            // unsafe {
-            //     let a =core::ptr::read_volatile(dst_vec[0][0] as *const u8);
-            //     return a as isize;
-            // }
-            // dst_vec[0].len() as isize
-            //unsafe {
-                // dst_vec[0][0] as isize
-                // core::ptr::read(dst_vec[0].as_ptr() as *const u8) as isize
-                //0
-            //}
-            // let mut src :&mut [u8];
-            // let mut a =0 as u8;
-            // for (idx , dst) in dst_vec.into_iter().enumerate(){
-            //     let unit_len = dst.len();
-            //     if idx == 0{
-            //         // src = dst;
-            //         // let d = dst[0] ;
-            //         // src = dst;
-            //         let d =  dst[0] ;
-            //         return  d as isize;
-            //         // a = d; 
-            //         // unsafe {
-            //         //     src.copy_from_slice(core::slice::from_raw_parts(
-            //         //         dst_vec.wra, 
-            //         //         unit_len));
-            //         // }   
-            //     }
-            //     break;
-            // }
-            // -1
-            // src[0] as isize
-            // a as isize
+        if check_pte_valid(va) == 2 || check_pte_valid(va) == 6 {
             unsafe {
-                // let  d=*translated_byte_buffer(token, ptr, 1).get(0).unwrap().as_ptr();
-                // core::ptr::read(d as *const u8) as isize
-                // let data = dst_vec[0].as_ptr();
-                // let data = dst_vec[0].get(0).unwrap();
-                // *data as isize
-                0
+                dst_vec[0][0] as isize
+                // core::ptr::read(dst_vec[0][0] as *const u8) as isize 
+                // 0
             }
         }else {
             -1
         }
-        // core::ptr::read_volatile(dst_vec.as_ptr() as *const u8) as isize
-        // core::ptr::read(dst_vec.as_ptr().wrapping_byte_add(1) as *const u8) as isize
-        // core::ptr::read(dst_vec.as_ptr() as *const u8) as isize
-        // *dst_vec[0]
     }else if trace_request == 1{
         let va = VirtAddr::from(id);
-        // core::ptr::write_bytes(dst_vec[0].as_mut_ptr(), data as u8, 1);
-        if check_pte_valid(va) == 4 || check_pte_valid(va) == 6{
-            // dst_vec[0][0] = data as u8;
+        if check_pte_valid(va) == 4 || check_pte_valid(va) == 6{// || !dst_vec.is_empty() || !dst_vec[0].is_empty(){
+            unsafe {
+                // core::ptr::write(dst_vec[0][0] as *mut u8, data as u8);
+                // core::ptr::write(dst_vec.as_mut_ptr() as *mut u8, data as u8);
+                let mut data1 = &mut dst_vec[0];
+                data1[0] = data as u8;
+                // let mut data1 = dst_vec[0][0] as *mut u8;
+                // data1 = &(data as u8);
+            }
             0
         }else {
             -1
@@ -207,3 +171,54 @@ pub fn sys_sbrk(size: i32) -> isize {
         -1
     }
 }
+
+
+            // dst_vec[0][0] as isize
+            // unsafe {
+            //     core::ptr::read(dst_vec[0].as_ptr() as *const u8) as isize
+            //     core::ptr::read_volatile(dst_vec[0][0] as *const u8);
+            // }
+            // **dst_vec[0] as u8 as isize
+            // unsafe {
+            //     let a =core::ptr::read_volatile(dst_vec[0][0] as *const u8);
+            //     return a as isize;
+            // core::ptr::read(dst_vec[0][0] as *const u8) as isize
+                // core::ptr::read(dst_vec.as_ptr() as *const usize) as isize
+                // core::ptr::read(dst_vec.as_ptr() as *const usize) as isize
+                // core::ptr::read_unaligned(dst_vec.as_ptr() as *const u8) as isize
+                // core::ptr::read_unaligned(dst_vec.as_ptr() as *const u64) as isize
+                // core::ptr::read_volatile(dst_vec.as_ptr() as *const u64) as isize
+                // core::ptr::read_unaligned(dst_vec[0][0] as *const u8) as isize
+                // dst_vec.as_ptr() as u8 as isize
+                // let ptr = dst_vec[0].as_mut_ptr();
+                // *ptr as u8 as isize
+            // }
+            // dst_vec[0].len() as isize
+            //unsafe {
+                // dst_vec[0][0] as isize
+                // core::ptr::read(dst_vec[0].as_ptr() as *const u8) as isize
+                //0
+            //}
+            // let mut src :&mut [u8];
+            // let mut a =0 as u8;
+            // for (idx , dst) in dst_vec.into_iter().enumerate(){
+            //     let unit_len = dst.len();
+            //     if idx == 0{
+            //         // src = dst;
+            //         // let d = dst[0] ;
+            //         // src = dst;
+            //         let d =  dst[0] ;
+            //         return  d as isize;
+            //         // a = d; 
+            //         // unsafe {
+            //         //     src.copy_from_slice(core::slice::from_raw_parts(
+            //         //         dst_vec.wra, 
+            //         //         unit_len));
+            //         // }   
+            //     }
+            //     break;
+            // }
+            // core::ptr::read_volatile(dst_vec.as_ptr() as *const u8) as isize
+            // core::ptr::read(dst_vec.as_ptr().wrapping_byte_add(1) as *const u8) as isize
+            // core::ptr::read(dst_vec.as_ptr() as *const u8) as isize
+            // *dst_vec[0]
