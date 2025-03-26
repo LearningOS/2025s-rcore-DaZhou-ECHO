@@ -69,6 +69,10 @@ pub struct TaskControlBlockInner {
 
     /// Program break
     pub program_brk: usize,
+    /// 
+    pub stride:usize,
+    ///
+    pub priority : usize, 
 }
 
 impl TaskControlBlockInner {
@@ -85,6 +89,9 @@ impl TaskControlBlockInner {
     }
     pub fn is_zombie(&self) -> bool {
         self.get_status() == TaskStatus::Zombie
+    }
+    fn get_stride(&self) -> usize{
+        self.stride
     }
 
 }
@@ -120,6 +127,8 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    stride:0,
+                    priority:16,
                 })
             },
         };
@@ -193,6 +202,8 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                    stride:parent_inner.stride,
+                    priority:parent_inner.priority,
                 })
             },
         });
@@ -293,6 +304,10 @@ impl TaskControlBlock {
     pub fn user_munmap(&self , start_va:VirtAddr ,end_va:VirtAddr) -> isize{
         let mut inner = self.inner.exclusive_access();
         inner.memory_set.user_munmap(start_va, end_va)
+    }
+    ///
+    pub fn get_stride(&self) -> usize{
+        self.inner_exclusive_access().get_stride()
     }
 
 }
