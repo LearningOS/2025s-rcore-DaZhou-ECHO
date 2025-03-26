@@ -1,8 +1,9 @@
 //! Types related to task management & Functions for completely changing TCB
+#![allow(missing_docs)]
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
 use crate::config::TRAP_CONTEXT_BASE;
-use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::mm::{MapPermission, MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
@@ -21,7 +22,7 @@ pub struct TaskControlBlock {
     pub kernel_stack: KernelStack,
 
     /// Mutable
-    inner: UPSafeCell<TaskControlBlockInner>,
+    pub inner: UPSafeCell<TaskControlBlockInner>,
 }
 
 impl TaskControlBlock {
@@ -85,6 +86,7 @@ impl TaskControlBlockInner {
     pub fn is_zombie(&self) -> bool {
         self.get_status() == TaskStatus::Zombie
     }
+
 }
 
 impl TaskControlBlock {
@@ -205,6 +207,41 @@ impl TaskControlBlock {
         // **** release child PCB
         // ---- release parent PCB
     }
+    // ///
+    // pub fn spawn_fork(self:&Arc<Self>) -> Arc<Self>{
+    //     let mut parent_inner = self.inner_exclusive_access();
+    //     let memory_set = MemorySet::new_with_trampoline();
+    //     let trap_cx_ppn = memory_set
+    //         .translate(VirtAddr::from(TRAP_CONTEXT_BASE).into())
+    //         .unwrap()
+    //         .ppn();
+    //     let pid_handle = pid_alloc();
+    //     let kernel_stack = kstack_alloc();
+    //     let kernel_stack_top = kernel_stack.get_top();
+    //     let task_control_block = Arc::new(TaskControlBlock {
+    //         pid: pid_handle,
+    //         kernel_stack,
+    //         inner: unsafe {
+    //             UPSafeCell::new(TaskControlBlockInner {
+    //                 trap_cx_ppn,
+    //                 base_size: parent_inner.base_size,
+    //                 task_cx: TaskContext::goto_trap_return(kernel_stack_top),
+    //                 task_status: TaskStatus::Ready,
+    //                 memory_set,
+    //                 parent: Some(Arc::downgrade(self)),
+    //                 children: Vec::new(),
+    //                 exit_code: 0,
+    //                 heap_bottom: parent_inner.heap_bottom,
+    //                 program_brk: parent_inner.program_brk,
+    //             })
+    //         },
+    //     });
+    //     parent_inner.children.push(task_control_block.clone());
+    //     let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
+    //     trap_cx.kernel_sp = kernel_stack_top;
+    //     task_control_block
+    // }
+
 
     /// get pid of process
     pub fn getpid(&self) -> usize {
@@ -236,6 +273,28 @@ impl TaskControlBlock {
             None
         }
     }
+
+    ///
+    pub fn user_mmap(&self ,start_va:VirtAddr ,end_va:VirtAddr ,permission:MapPermission) -> isize{
+        let mut inner = self.inner.exclusive_access();
+        if inner.memory_set.check_vpn_valid(start_va, end_va) == -1{
+            return  -1;
+        }
+        inner.memory_set.insert_framed_area(start_va, end_va, permission);
+        0
+    }
+    ///
+    pub fn check_pte_valid(&self , va : VirtAddr)->isize{
+        let inner = self.inner.exclusive_access();
+        inner.memory_set.check_pte_valid(va)
+    }
+
+    ///
+    pub fn user_munmap(&self , start_va:VirtAddr ,end_va:VirtAddr) -> isize{
+        let mut inner = self.inner.exclusive_access();
+        inner.memory_set.user_munmap(start_va, end_va)
+    }
+
 }
 
 #[derive(Copy, Clone, PartialEq)]

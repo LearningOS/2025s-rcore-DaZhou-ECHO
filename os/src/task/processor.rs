@@ -3,10 +3,11 @@
 //! Here, the continuous operation of user apps in CPU is maintained,
 //! the current running state of CPU is recorded,
 //! and the replacement and transfer of control flow of different applications are executed.
-
+#![allow(unused)]
 use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
+use crate::mm::{MapPermission, VirtAddr};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
@@ -44,6 +45,21 @@ impl Processor {
     pub fn current(&self) -> Option<Arc<TaskControlBlock>> {
         self.current.as_ref().map(Arc::clone)
     }
+    ///
+    fn user_mmap(&self,start_va:VirtAddr , end_va: VirtAddr ,permission:MapPermission) -> isize{
+        match self.current(){
+            Some(tcb) => (*tcb).user_mmap(start_va, end_va, permission),
+            None =>-1,
+        }
+    }
+    ///
+    fn user_munmap(&self,start_va:VirtAddr , end_va: VirtAddr) -> isize{
+        match self.current(){
+            Some(tcb) =>(*tcb).user_munmap(start_va, end_va),
+            None => -1,
+        }
+    }
+    
 }
 
 lazy_static! {
@@ -108,4 +124,12 @@ pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
     unsafe {
         __switch(switched_task_cx_ptr, idle_task_cx_ptr);
     }
+}
+///
+pub fn user_mmap(start_va:VirtAddr , end_va: VirtAddr ,permission:MapPermission) -> isize{
+    PROCESSOR.exclusive_access().user_mmap(start_va, end_va, permission)
+}
+///
+pub fn user_munmap(start_va:VirtAddr , end_va: VirtAddr) -> isize{
+    PROCESSOR.exclusive_access().user_munmap(start_va, end_va)
 }

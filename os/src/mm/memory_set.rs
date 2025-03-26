@@ -83,7 +83,7 @@ impl MemorySet {
         self.areas.push(map_area);
     }
     /// Mention that trampoline is not collected by areas.
-    fn map_trampoline(&mut self) {
+    pub fn map_trampoline(&mut self) {
         self.page_table.map(
             VirtAddr::from(TRAMPOLINE).into(),
             PhysAddr::from(strampoline as usize).into(),
@@ -299,6 +299,59 @@ impl MemorySet {
         } else {
             false
         }
+    }
+    ///
+    pub fn check_pte_valid(&self , va:VirtAddr) -> isize{
+        match  self.page_table.find_pte(VirtPageNum::from(va.floor())){
+            Some(pte) => {
+                let mut a =0;
+                if pte.readable() {a+=2;}
+                if pte.writable() {a+=4;}
+                a
+            },
+            None => -1,
+        }
+    }
+///
+pub fn user_munmap(&mut self , start_va: VirtAddr , end_va: VirtAddr) -> isize{
+    let vpn_range = VPNRange::new(
+        // VirtPageNum::from(start_va.floor()),
+        // VirtPageNum::from(end_va.ceil())
+        start_va.floor(),
+        end_va.ceil()
+    );
+    for vpn in vpn_range{
+        // if self.page_table.find_pte(vpn).is_none(){
+        //     return -1;
+        // }
+        match self.page_table.find_pte(vpn) {
+            Some(pte) => if !pte.is_valid() {return  -1;},
+            None => return -1,
+        }
+    }
+    if let Some(area) = self
+        .areas
+        .iter_mut()
+        .find(|area| area.vpn_range.get_start() == start_va.floor())
+    {
+        if area.vpn_range.get_end() != end_va.ceil(){
+            return -1;
+        }
+        area.unmap(&mut self.page_table);
+        0
+    } else {
+        -1
+    }
+}
+///
+pub fn check_vpn_valid(&self , start_va: VirtAddr , end_va: VirtAddr) -> isize{
+    self.page_table.check_vpn_valid(start_va, end_va)
+}
+    ///
+    pub fn new_with_trampoline() -> Self{
+        let mut new = MemorySet::new_bare();
+        new.map_trampoline();
+        new
     }
 }
 /// map area structure, controls a contiguous piece of virtual memory
