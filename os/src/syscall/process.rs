@@ -148,6 +148,7 @@ pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
     // let permission =MapPermission::from_bits_truncate((port | 0b1000 ).try_into().unwrap());
     let permission=MapPermission::from_bits_truncate((port << 1) as u8) | MapPermission::U;
     user_mmap(start_va, end_va, permission)
+    
 }
 
 /// YOUR JOB: Implement munmap.
