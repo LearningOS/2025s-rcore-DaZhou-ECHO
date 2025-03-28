@@ -1,9 +1,10 @@
 //! Types related to task management & Functions for completely changing TCB
+#![allow(missing_docs)]
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
 use crate::config::TRAP_CONTEXT_BASE;
 use crate::fs::{File, Stdin, Stdout};
-use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::mm::{MapPermission, MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
@@ -23,7 +24,7 @@ pub struct TaskControlBlock {
     pub kernel_stack: KernelStack,
 
     /// Mutable
-    inner: UPSafeCell<TaskControlBlockInner>,
+    pub inner: UPSafeCell<TaskControlBlockInner>,
 }
 
 impl TaskControlBlock {
@@ -71,6 +72,11 @@ pub struct TaskControlBlockInner {
 
     /// Program break
     pub program_brk: usize,
+
+    /// 
+    pub stride:usize,
+    ///
+    pub priority : usize, 
 }
 
 impl TaskControlBlockInner {
@@ -93,6 +99,9 @@ impl TaskControlBlockInner {
             self.fd_table.push(None);
             self.fd_table.len() - 1
         }
+    }
+    fn get_stride(&self) -> usize{
+        self.stride
     }
 }
 
@@ -135,6 +144,8 @@ impl TaskControlBlock {
                     ],
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    stride:0,
+                    priority:16,
                 })
             },
         };
@@ -216,6 +227,8 @@ impl TaskControlBlock {
                     fd_table: new_fd_table,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                    stride:0,
+                    priority:16,
                 })
             },
         });
@@ -261,6 +274,33 @@ impl TaskControlBlock {
             None
         }
     }
+
+
+    ///
+    pub fn user_mmap(&self ,start_va:VirtAddr ,end_va:VirtAddr ,permission:MapPermission) -> isize{
+        let mut inner = self.inner.exclusive_access();
+        if inner.memory_set.check_vpn_valid(start_va, end_va) == -1{
+            return  -1;
+        }
+        inner.memory_set.insert_framed_area(start_va, end_va, permission);
+        0
+    }
+    ///
+    pub fn check_pte_valid(&self , va : VirtAddr)->isize{
+        let inner = self.inner.exclusive_access();
+        inner.memory_set.check_pte_valid(va)
+    }
+
+    ///
+    pub fn user_munmap(&self , start_va:VirtAddr ,end_va:VirtAddr) -> isize{
+        let mut inner = self.inner.exclusive_access();
+        inner.memory_set.user_munmap(start_va, end_va)
+    }
+    ///
+    pub fn get_stride(&self) -> usize{
+        self.inner_exclusive_access().get_stride()
+    }
+
 }
 
 #[derive(Copy, Clone, PartialEq)]
