@@ -4,7 +4,7 @@
 //!
 //! `UPSafeCell<OSInodeInner>` -> `OSInode`: for static `ROOT_INODE`,we
 //! need to wrap `OSInodeInner` into `UPSafeCell`
-use super::File;
+use super::{File, StatMode};
 use crate::drivers::BLOCK_DEVICE;
 use crate::mm::UserBuffer;
 use crate::sync::UPSafeCell;
@@ -25,6 +25,8 @@ pub struct OSInode {
 /// The OS inode inner in 'UPSafeCell'
 pub struct OSInodeInner {
     offset: usize,
+    // link
+    // link:usize,
     inode: Arc<Inode>,
 }
 
@@ -34,7 +36,7 @@ impl OSInode {
         Self {
             readable,
             writable,
-            inner: unsafe { UPSafeCell::new(OSInodeInner { offset: 0, inode }) },
+            inner: unsafe { UPSafeCell::new(OSInodeInner { offset: 0, inode}) },
         }
     }
     /// read all data from the inode
@@ -53,6 +55,27 @@ impl OSInode {
         }
         v
     }
+
+    ///get inode
+    pub fn get_inode(&self) -> Arc<Inode>{
+        let inner = self.inner.exclusive_access();
+        inner.inode.clone()
+    }
+    #[allow(unused)]
+    ///
+    pub fn get_stat(&self) -> Option<(u64,StatMode,u32)>{
+        // let inode = self.get_inode();
+        // let (inode_id ,stat_mode , nlink) = inode.get_stat();
+        let (inode_id ,stat_mode , nlink) = self.get_inode().get_stat();
+        // let (_,_,nlink) = ROOT_INODE.get_stat();
+        match stat_mode {
+            0 => Some((inode_id,StatMode::NULL,nlink)),
+            1 => Some((inode_id,StatMode::DIR,nlink)),
+            2 => Some((inode_id,StatMode::FILE,nlink)),
+            _ => None
+        }
+    }
+
 }
 
 lazy_static! {
@@ -124,7 +147,17 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
         })
     }
 }
-
+#[allow(unused)]
+///
+pub fn create_hard_link(old_name:&str,new_name: &str) -> isize{
+    ROOT_INODE.create_hard_link(old_name,new_name)
+}
+#[allow(unused)]
+///
+pub fn delete_hard_link(old_name:&str) -> isize{
+    ROOT_INODE.delete_hard_link(old_name)
+    // 0
+}
 impl File for OSInode {
     fn readable(&self) -> bool {
         self.readable

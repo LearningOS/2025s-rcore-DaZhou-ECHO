@@ -2,7 +2,6 @@ use super::{get_block_cache, BlockDevice, BLOCK_SZ};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::{Debug, Formatter, Result};
-
 /// Magic number for sanity check
 const EFS_MAGIC: u32 = 0x3b800001;
 /// The max number of direct inodes
@@ -86,6 +85,7 @@ pub struct DiskInode {
     pub indirect1: u32,
     pub indirect2: u32,
     type_: DiskInodeType,
+    pub hard_link: u32,
 }
 
 impl DiskInode {
@@ -97,6 +97,7 @@ impl DiskInode {
         self.indirect1 = 0;
         self.indirect2 = 0;
         self.type_ = type_;
+        self.hard_link=1;
     }
     /// Whether this inode is a directory
     pub fn is_dir(&self) -> bool {
@@ -238,6 +239,11 @@ impl DiskInode {
     /// Clear size to zero and return blocks that should be deallocated.
     /// We will clear the block contents to zero later.
     pub fn clear_size(&mut self, block_device: &Arc<dyn BlockDevice>) -> Vec<u32> {
+        if self.hard_link > 1 {
+            self.hard_link -= 1;
+            return Vec::new(); // 当仍有硬链接时，不释放数据块
+        }
+
         let mut v: Vec<u32> = Vec::new();
         let mut data_blocks = self.data_blocks() as usize;
         self.size = 0;
@@ -386,6 +392,24 @@ impl DiskInode {
             start = end_current_block;
         }
         write_size
+    }
+
+    pub fn get_type(&self) -> usize{
+        if self.is_dir(){
+            1
+        }else if self.is_file(){
+            2
+        }else {
+            0
+        }
+    }
+    #[allow(unused)]
+    pub fn get_hard_link(&self) -> u32{
+        self.hard_link
+    }
+    #[allow(unused)]
+    pub fn sup_hard_link(&mut self){
+        self.hard_link-=1;
     }
 }
 /// A directory entry
