@@ -1,5 +1,5 @@
 //! Implementation of  [`ProcessControlBlock`]
-
+#![allow(missing_docs,unused)]
 use super::id::RecycleAllocator;
 use super::manager::insert_into_pid2process;
 use super::TaskControlBlock;
@@ -14,6 +14,7 @@ use alloc::sync::{Arc, Weak};
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::RefMut;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 /// Process Control Block
 pub struct ProcessControlBlock {
@@ -22,7 +23,7 @@ pub struct ProcessControlBlock {
     /// mutable
     inner: UPSafeCell<ProcessControlBlockInner>,
 }
-
+#[allow(missing_docs)]
 /// Inner of Process Control Block
 pub struct ProcessControlBlockInner {
     /// is zombie?
@@ -49,6 +50,15 @@ pub struct ProcessControlBlockInner {
     pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
     /// condvar list
     pub condvar_list: Vec<Option<Arc<Condvar>>>,
+
+
+    pub deadlock_detect:AtomicBool,
+    pub sem_available:Vec<usize>,
+    pub sem_allocation: Vec<(usize,Vec<usize>)>,
+    pub sem_need:Vec<(usize,Vec<usize>)>,
+    // pub sem_work:Vec<usize>,
+    // pub sem_finish:Vec<(usize,bool)>,
+    pub check:usize,
 }
 
 impl ProcessControlBlockInner {
@@ -119,6 +129,15 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+
+                    deadlock_detect: AtomicBool::new(false),
+                    sem_available:Vec::new(),
+                    sem_allocation:vec![(0,Vec::new())],
+                    sem_need:vec![(0,Vec::new())],
+                    // sem_work:Vec::new(),
+                    // sem_finish:vec![(0,false)],
+                    check:0,
+
                 })
             },
         });
@@ -245,6 +264,14 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    deadlock_detect:AtomicBool::new(false),
+
+                    sem_available:Vec::new(),
+                    sem_allocation:vec![(0,Vec::new())],
+                    sem_need:vec![(0,Vec::new())],
+                    // sem_work:Vec::new(),
+                    // sem_finish:vec![(0,false)],
+                    check:0,
                 })
             },
         });
@@ -281,5 +308,86 @@ impl ProcessControlBlock {
     /// get pid
     pub fn getpid(&self) -> usize {
         self.pid.0
+    }
+    ///detect
+    pub fn enable_deadlock_detect(&self){
+        let inner = self.inner.exclusive_access();
+        inner.deadlock_detect.store(true, Ordering::SeqCst);
+    }
+    ///
+    pub fn thread_create_update(&self,tid:usize){
+        let mut inner = self.inner.exclusive_access();
+        let len = inner.sem_available.len();
+        inner.sem_allocation.push((tid, vec![0;len]));
+        inner.sem_need.push((tid, vec![0;len]));
+        // inner.sem_finish.push((tid, false));
+
+    }
+    ///
+    pub fn thread_delete_update(&self,tid:usize){
+        let mut inner = self.inner.exclusive_access();
+        inner.sem_allocation.retain(|(id, _)| *id != tid);
+        inner.sem_need.retain(|(id, _)| *id != tid);
+        // inner.sem_finish.retain(|(id, _)| *id != tid);
+    }
+    // /// true -> dead
+    // pub fn check_sem_valid(&self)-> bool{
+    //     let inner = self.inner.exclusive_access();
+    //     for (_,b) in inner.sem_finish.iter(){
+    //         if !b{
+    //             return true;
+    //         }
+    //     }
+    //     false
+    // }
+    /// option true => add
+    pub fn change_sem_need(&self,tid:usize,sem_id:usize,value : usize,option:bool) -> isize{
+        let mut inner = self.inner.exclusive_access();
+        if let Some((_, need_vec)) = inner.sem_need.iter_mut().find(|(id, _)| *id == tid) {
+            if sem_id >= need_vec.len() {panic!()}
+            if option{
+                need_vec[sem_id] += value;
+            }else {
+                need_vec[sem_id] -= value;
+            }
+            0
+        }else {
+            // -1
+            panic!()
+        }
+        
+    }
+    pub fn change_sem_allocation(&self,tid:usize,sem_id:usize,value : usize,option:bool) -> isize{
+        let mut inner = self.inner.exclusive_access();
+        if let Some((_, sem_allocation)) = inner.sem_allocation.iter_mut().find(|(id, _)| *id == tid) {
+            if sem_id >= sem_allocation.len() {panic!()}
+            if option{
+                sem_allocation[sem_id] += value;
+            }else {
+                sem_allocation[sem_id] -= value;
+            }
+            0
+        }else {
+            // -1
+            panic!()
+        }
+    }
+    // pub fn change_sem_finish(&self,tid:usize,value : bool) -> isize{
+    //     let mut inner = self.inner.exclusive_access();
+    //     if let Some((_, sem_finish)) = inner.sem_finish.iter_mut().find(|(id, _)| *id == tid) {
+    //         *sem_finish = value;
+    //         0
+    //     }else {
+    //         // -1
+    //         panic!()
+    //     }
+    // }
+    /// true => have value
+    pub fn  detect_resource_occupancy(&self,tid:usize) -> bool{
+        let mut inner = self.inner.exclusive_access();
+        inner.sem_allocation
+            .iter_mut()
+            .find_map(|(id, alloc)| (*id == tid).then_some(alloc))
+            .map_or(false, |alloc| alloc.iter().all(|&x| x == 0))
     }
 }

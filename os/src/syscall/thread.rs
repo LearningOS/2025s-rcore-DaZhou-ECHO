@@ -50,6 +50,8 @@ pub fn sys_thread_create(entry: usize, arg: usize) -> isize {
         trap_handler as usize,
     );
     (*new_task_trap_cx).x[10] = arg;
+    drop(process_inner);
+    process.thread_create_update(new_task_tid);
     new_task_tid as isize
 }
 /// get current thread id syscall
@@ -112,6 +114,8 @@ pub fn sys_waittid(tid: usize) -> i32 {
     if let Some(exit_code) = exit_code {
         // dealloc the exited thread
         process_inner.tasks[tid] = None;
+        drop(process_inner);
+        process.thread_delete_update(tid);
         exit_code
     } else {
         // waited thread has not exited

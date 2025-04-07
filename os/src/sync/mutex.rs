@@ -6,8 +6,20 @@ use crate::task::{block_current_and_run_next, suspend_current_and_run_next};
 use crate::task::{current_task, wakeup_task};
 use alloc::{collections::VecDeque, sync::Arc};
 
+use core::any::Any;
+ 
+ /// convert current type to &dyn Any
+ pub trait AnyConvertor {
+     fn as_any(&self) -> &dyn Any;
+ }
+ 
+ impl<T: 'static> AnyConvertor for T {
+     fn as_any(&self) -> &dyn Any {
+         self
+     }
+ }
 /// Mutex trait
-pub trait Mutex: Sync + Send {
+pub trait Mutex: Sync + Send +AnyConvertor{
     /// Lock the mutex
     fn lock(&self);
     /// Unlock the mutex
@@ -102,4 +114,16 @@ impl Mutex for MutexBlocking {
             mutex_inner.locked = false;
         }
     }
+}
+///
+pub fn get_locked_value(mutex: Arc<dyn Mutex>) -> Option<bool> {
+    let mutex_ref: &dyn Mutex = mutex.as_ref(); // 从 Arc<dyn Mutex> 获取 &dyn Mutex
+
+    if let Some(spin) = mutex_ref.as_any().downcast_ref::<MutexSpin>() {
+        return Some(*spin.locked.exclusive_access());
+    }
+    if let Some(blocking) = mutex_ref.as_any().downcast_ref::<MutexBlocking>() {
+        return Some(blocking.inner.exclusive_access().locked);
+    }
+    None
 }
